@@ -2720,4 +2720,66 @@ def data_norms(home,project_name,GF_list,decimate=None,bandpass=[None,None,None]
         print("||InSAR|| = "+str(N))
     else:
         print("||InSAR|| = NaN")
+
+
+def calculate_reslution_matrix (K_inv, WG):
+    '''
+        calculate_reslution_matrix (G^-g * G) 
+
+        input WG = Weighted G matrix
+        input K_inv = Generalized inverse matrix 
+        '''
+    from numpy import matmul
+
+    return matmul(K_inv, WG)
+
+
+def calculate_reslution_matrix (K_inv, WG):
+    '''
+        calculate_reslution_matrix (G^-g * G) 
+
+        input WG = Weighted G matrix
+        input K_inv = Generalized inverse matrix 
+        '''
+    from numpy import matmul
+
+    return matmul(K_inv, WG)
+
+def calc_distance_weight_matrix (coord):
+    from numpy import zeros
+    import scipy.spatial.distance as sd
+
+    numfault = len(coord)
+
+    coord_mat = zeros((numfault*2,3))
+    for ii in range (numfault):
+        jj = ii*2 
+        kk= ii*2 +1 
+        coord_mat[jj,0] = coord [ii,0]
+        coord_mat[jj,1] = coord [ii,1]
+        coord_mat[jj,2] = coord [ii,2]
+
+        coord_mat[kk,0] = coord [ii,0]
+        coord_mat[kk,1] = coord [ii,1]
+        coord_mat[kk,2] = coord [ii,2]
+
+    W_matr = sd.cdist(coord_mat, coord_mat, 'euclidean')
+
+
+
+    print ('W_matr',W_matr)
+
+    return W_matr
+
+
+def calculate_spread_BG (W_matr, R_matr):
+    '''
+        calculate_BG speard ||R||
+        input R = Resolution  matrix 
+        '''
+    from numpy.linalg import norm
+    spread_BG = norm( W_matr * R_matr**2 )
+
+    return spread_BG
+
     

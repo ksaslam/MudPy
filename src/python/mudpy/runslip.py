@@ -602,8 +602,14 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     from datetime import datetime
     import gc
     from matplotlib import path
+    from numpy.linalg import inv as inverse
+    from numpy import loadtxt
     
-    
+    # added by khurram
+    fault_file=home+project_name+'/data/model_info/'+fault_name
+    #First read fault model file
+    source=loadtxt(fault_file,ndmin=2)
+
 
     t1=datetime.now()
     #Get data vector
@@ -701,6 +707,16 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 LtLt=Lt.T.dot(Lt)
             else: #Mixed inversion
                 Kinv=K+(lambda_spatial**2)*LsLs+(lambda_temporal**2)*LtLt
+            
+            # Added by khurram
+            Gen_inv  = inverse(Kinv).dot( WG.T) 
+            print ('calculating R matrix', WG.shape, Kinv.shape) 
+            res_matr = inv.calculate_reslution_matrix (Gen_inv, WG)     # calculating the R (resolution matrix, based on the weight G matrix)    # G^-g * G
+            dist_W = inv.calc_distance_weight_matrix (source)
+            spread = inv.calculate_spread_BG ( dist_W, res_matr)                      # calculating the Backus- Gilbert spread
+            
+            print (spread)
+
             if solver.lower()=='lstsq':
                 sol,res,rank,s=lstsq(Kinv,x)
             elif solver.lower()=='nnls':
@@ -714,6 +730,8 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 sol=expand_dims(sol,axis=1)
             else:
                 print('ERROR: Unrecognized solver \''+solver+'\'')
+
+            
 
             #Force faults outside a polygon to be zero
 #            print('WARNING: Using fault polygon to force solutions to zero')
