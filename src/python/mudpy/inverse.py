@@ -2741,11 +2741,14 @@ def calculate_reslution_matrix (K_inv, WG):
         input WG = Weighted G matrix
         input K_inv = Generalized inverse matrix 
         '''
-    from numpy import matmul
-
-    return matmul(K_inv, WG)
+    return (K_inv).dot (WG)
 
 def calc_distance_weight_matrix (coord):
+    '''
+        calculate distance weight matrix  ||W_d||
+        input coord = fault coordinates 
+        '''
+
     from numpy import zeros
     import scipy.spatial.distance as sd
 
@@ -2781,5 +2784,16 @@ def calculate_spread_BG (W_matr, R_matr):
     spread_BG = norm( W_matr * R_matr**2 )
 
     return spread_BG
+
+
+
+def gen_w_vectors(num_w1, num_w2, min_w1, max_w1, min_w2, max_w2):
+    from numpy import linspace
+
+    m1a = linspace(min_w1,max_w1, num_w1)
+    m2a = linspace(min_w2,max_w2, num_w2)
+
+    return m1a, m2a
+    # grid search, compute error, E
 
     
