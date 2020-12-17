@@ -887,7 +887,7 @@ def getLt(home,project_name,fault_name,num_windows):
     return L
 
 
-def get_data_weights(home,project_name,GF_list,d,decimate):
+def get_data_weights(home,project_name,GF_list,d,decimate, all_weights):
     '''
     Assemble matrix of data weights from sigmas of observations
     '''    
@@ -911,9 +911,9 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     kgf=0
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
-        w[kinsert]=1/weights[i[ksta],0] #North
-        w[kinsert+1]=1/weights[i[ksta],1] #East
-        w[kinsert+2]=1/weights[i[ksta],2] #Up
+        w[kinsert]=1/weights[i[ksta],0] * all_weights[0] #North
+        w[kinsert+1]=1/weights[i[ksta],1] * all_weights[0] #East
+        w[kinsert+2]=1/weights[i[ksta],2] * all_weights[0] #Up
         kinsert=kinsert+3
     #Displacement waveform weights
     kgf=1
@@ -925,13 +925,13 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
             st[0]=stdecimate(st[0],decimate)
         nsamples=st[0].stats.npts
         wn=(1/weights[i[ksta],3])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=wn
+        w[kinsert:kinsert+nsamples]=wn * all_weights[1]
         kinsert=kinsert+nsamples
         we=(1/weights[i[ksta],4])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=we
+        w[kinsert:kinsert+nsamples]=we * all_weights[1]
         kinsert=kinsert+nsamples
         wu=(1/weights[i[ksta],5])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=wu
+        w[kinsert:kinsert+nsamples]=wu * all_weights[1]
         kinsert=kinsert+nsamples
     #velocity waveform weights
     kgf=2
@@ -943,17 +943,17 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
             st[0]=stdecimate(st[0],decimate)
         nsamples=st[0].stats.npts
         wn=(1/weights[i[ksta],6])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=wn
+        w[kinsert:kinsert+nsamples]=wn * all_weights[2]
         kinsert=kinsert+nsamples
         we=(1/weights[i[ksta],7])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=we
+        w[kinsert:kinsert+nsamples]=we * all_weights[2]
         kinsert=kinsert+nsamples
         wu=(1/weights[i[ksta],8])*ones(nsamples)
         try:
-            w[kinsert:kinsert+nsamples]=wu
+            w[kinsert:kinsert+nsamples]=wu * all_weights[2]
         except:
             print('WARNING: mismatch in data weights length')
-            w[kinsert:kinsert+nsamples]=wu[:-1]  #I don't know why this happens, wu is the right length but w is too short by one but only for the last station
+            w[kinsert:kinsert+nsamples]=wu[:-1] * all_weights[2]  #I don't know why this happens, wu is the right length but w is too short by one but only for the last station
         kinsert=kinsert+nsamples
     #Tsunami
     kgf=3
@@ -969,13 +969,13 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
 #        print('WARNING: Tsunami weights have been hard coded')
 #        w[kinsert:kinsert+nsamples]=wtsun*wtsun2
         
-        w[kinsert:kinsert+nsamples]=wtsun
+        w[kinsert:kinsert+nsamples]=wtsun * all_weights[3]
         kinsert=kinsert+nsamples
     #InSAR
     kgf=4
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
-        w[kinsert]=1/weights[i[ksta],10] #LOS
+        w[kinsert]=1/weights[i[ksta],10] * all_weights[4] #LOS
         kinsert+=1
     #Make W and exit
     return w
@@ -2734,14 +2734,14 @@ def calculate_reslution_matrix (K_inv, WG):
     return matmul(K_inv, WG)
 
 
-def calculate_reslution_matrix (K_inv, WG):
+def calculate_reslution_matrix (G_inv, WG):
     '''
         calculate_reslution_matrix (G^-g * G) 
 
         input WG = Weighted G matrix
         input K_inv = Generalized inverse matrix 
         '''
-    return (K_inv).dot (WG)
+    return (G_inv).dot (WG)
 
 def calc_distance_weight_matrix (coord):
     '''
@@ -2780,20 +2780,28 @@ def calculate_spread_BG (W_matr, R_matr):
         calculate_BG speard ||R||
         input R = Resolution  matrix 
         '''
-    from numpy.linalg import norm
-    spread_BG = norm( W_matr * R_matr**2 )
 
-    return spread_BG
+    spread_BG = ( W_matr * R_matr**2 )
+
+    return spread_BG.sum()
 
 
 
-def gen_w_vectors(num_w1, num_w2, min_w1, max_w1, min_w2, max_w2):
+def gen_w_vectors(min_of_w, max_of_w, tot_w_points ):
     from numpy import linspace
+    import matplotlib.pyplot as plt
 
-    m1a = linspace(min_w1,max_w1, num_w1)
-    m2a = linspace(min_w2,max_w2, num_w2)
+    len_w = len(tot_w_points)
 
-    return m1a, m2a
+    weigh_grid = []
+    for ii in range(len_w):
+        #row. )
+        weigh_grid.append(linspace(min_of_w[ii],max_of_w[ii], tot_w_points[ii]) )
+    print (len(weigh_grid[1]))                
+    plt.plot(1)
+    plt.show()    
+
+#   return
     # grid search, compute error, E
 
     
