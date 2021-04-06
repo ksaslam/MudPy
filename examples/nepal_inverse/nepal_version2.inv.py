@@ -6,7 +6,7 @@ Project: 2015 Nepal earthquake
 
 Version 2 with updated parameter file options
 '''
-
+#new
 from mudpy import runslip
 import numpy as np
 from obspy.core import UTCDateTime
