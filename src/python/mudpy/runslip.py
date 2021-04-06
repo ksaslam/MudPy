@@ -588,7 +588,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
-                solver,bounds,weight=False,Ltype=2,target_moment=None,data_vector=None,onset_file=None):
+                solver,bounds,weight, weights_array, method_to_min_spread, Ltype=2,target_moment=None,data_vector=None,onset_file=None):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -598,6 +598,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     from numpy import loadtxt
     from datetime import datetime
     import gc
+    import matplotlib.pyplot as plt
 
 
     # added by khurram
@@ -612,33 +613,39 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,decimate,bandpass,onset_file=onset_file)
-    print(G.shape)                
+    print(G.shape, 'G shape') 
+    plt.show()               
     gc.collect()
 
-
-        
+    print ('this is Ltype', Ltype)
     # check if inversion is weighted? 
     if weight==True:
         # get weights array for the grid search
-        stat_w = array([1]) #linspace (0.1, 1, 3)
-        disp_w = array([0.5])#linspace (0.1, 1, 3)
-        sm_w =  array([1])
-        tsun_w = array([1])
-        insr_w = array([1])
-
-        BG_min_method = 'grid_search'  # select method
+        stat_w = weights_array[0] #linspace (0.1, 1, 3)
+        disp_w = weights_array[1]#linspace (0.1, 1, 3)
+        sm_w =  weights_array[2]
+        tsun_w = weights_array[3]
+        insr_w = weights_array[4]
+        
+        if (method_to_min_spread ==0): 
+            BG_min_method = 'grid_search' 
+        else: 
+            BG_min_method = 'Simulated Anhealing'
+         # select method
         print( BG_min_method +' ' + 'Method picked for spread grid search')
 
 #        if BG_min_method == 'grid_search'
+        kout = 0
         for ii in range(len(stat_w) ):
             for jj in range(len(disp_w)):
                 for kk in range(len(sm_w)):
                     for ll in range(len(tsun_w)):
                         for mm in range(len(insr_w)):
                             all_weights = [stat_w[ii], disp_w[jj], sm_w[kk], tsun_w[ll], insr_w[mm]]
-                            run_inversion_weighted(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,G,d, source, epicenter,
+                            spread =run_inversion_weighted(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,G,d, source, epicenter,
                                     rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
-                                    solver,bounds, all_weights, weight= True,Ltype=2,target_moment=None,data_vector=None,onset_file=None)
+                                    solver,bounds, all_weights, kout, weight,Ltype,target_moment=None,data_vector=None,onset_file=None)
+                            kout = kout + 1   # this is to save separate results
 
     else:
 
@@ -651,33 +658,41 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
 
 def run_inversion_weighted(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name, G, d, source, epicenter,
                 rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
-                solver,bounds, all_weights ,weight=True, Ltype=2,target_moment=None,data_vector=None,onset_file=None ):
+                solver,bounds, all_weights, kout, weight=True, Ltype=2,target_moment=None,data_vector=None,onset_file=None ):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
     from mudpy import inverse as inv
     from mudpy.forward import get_mu_and_area
-    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load,size,genfromtxt
+    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load,size,genfromtxt,save, asarray
     from numpy import where,sort,r_
     from numpy.linalg import lstsq
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
     from datetime import datetime
     from matplotlib import path
-    from numpy.linalg import inv as inverse   
+    from numpy.linalg import pinv as pinverse  
+    from numpy import savetxt  
 
+    print ('this is Ltype', Ltype)
     t1=datetime.now()
+    print('****************************************************************')
+    print ('weights values are',  all_weights)
     # weights are applied here
     print('Applying data weights')
     w=inv.get_data_weights(home,project_name,GF_list,d,decimate, all_weights)
-    for weights in w:
-        print ('data weights', weights)
+    # for weights in w:
+    #     print ('data weights', weights)
+    
+
+    #save('/Users/kaslasm/Documents/projects/mudpy_testing/results/Nepal_example/GFs/matrices/data.npy',d)
     W=empty(G.shape)
     W=tile(w,(G.shape[1],1)).T
     WG=empty(G.shape)
     WG=W*G
     wd=w*d.squeeze()
     wd=expand_dims(wd,axis=1)
+    #print(d.shape, wd, 'data vector_new')
     #Clear up extraneous variables
     W=None
     w=None
@@ -735,10 +750,11 @@ def run_inversion_weighted(home,project_name,run_name,fault_name,model_name,GF_l
     print('Preprocessing wall time was '+str(dt))
     print('\n--- RUNNING INVERSIONS ---\n')
     ttotal=datetime.now()
-    kout=0
+    #kout=0
     for kt in range(len(reg_temporal)):
-        for ks in range(len(reg_spatial)):
+        for ks in range(1): # for ks in range(len(reg_spatial)):
             t1=datetime.now()
+            print (reg_spatial, 'this is reg_spatial')
             lambda_spatial=reg_spatial[ks]
             lambda_temporal=reg_temporal[kt]
             print('Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal))
@@ -750,13 +766,25 @@ def run_inversion_weighted(home,project_name,run_name,fault_name,model_name,GF_l
                 Kinv=K+(lambda_spatial**2)*LsLs+(lambda_temporal**2)*LtLt
             
             # Added by khurram
-            Gen_inv  = inverse(Kinv).dot( WG.T) 
-            print ('calculating R matrix', WG.shape, Kinv.shape) 
-            Res_matr = inv.calculate_reslution_matrix (Gen_inv, WG)     # calculating the R (resolution matrix, based on the weight G matrix)    # G^-g * G
-            dist_W = inv.calc_distance_weight_matrix (source)
-            spread = inv.calculate_spread_BG ( dist_W, Res_matr)                      # calculating the Backus- Gilbert spread
-            
-            print (spread)
+            try:
+                Gen_inv  = pinverse(Kinv).dot( WG.T)
+                print('G_inv shape' , Gen_inv.shape )
+                print( 'WG shape',WG.shape)
+                Res_matr = inv.calculate_reslution_matrix (Gen_inv, WG)     # calculating the R (resolution matrix, based on the weight G matrix)    # G^-g * G 
+                D_matr = inv.calc_distance_weight_matrix (source)
+                print ('calculating Resolution')
+                spread = inv.calculate_spread_BG ( D_matr, Res_matr)                      # calculating the Backus- Gilbert spread
+                print ( 'spread of Gilbert Backus function using second method', spread)
+                # Res_matr_new = asarray(Res_matr)
+                # L = ( D_matr * Res_matr_new**2 )
+                # spread = L.sum()
+                # print ( 'spread of Gilbert Backus function', spread)
+            except:
+                print ('')
+                print ('********************************************************')
+                print("Genelarized inverse is not possible, populating dummy Gen_inv")              
+                print('*********************************************************')
+                print ('')
 
             if solver.lower()=='lstsq':
                 sol,res,rank,s=lstsq(Kinv,x)
@@ -789,16 +817,18 @@ def run_inversion_weighted(home,project_name,run_name,fault_name,model_name,GF_l
             if beta !=0:
                 sol=inv.rot2ds(sol,beta)
             #Write log
-            inv.write_log(home,project_name,run_name,kout,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
-                L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver,L2data)
+            inv.write_log_n_spread(home,project_name,run_name,kout,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
+                L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver,L2data, all_weights ,spread)
             #Write output to file
             inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
             inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout,onset_file=onset_file)
-            kout+=1
+            #kout+=1
             dt1=datetime.now()-t1
             dt2=datetime.now()-ttotal
             print('... inversion wall time was '+str(dt1)+', total wall time elapsed is '+str(dt2))
             print('****************************************************************')
+
+
 
 
 

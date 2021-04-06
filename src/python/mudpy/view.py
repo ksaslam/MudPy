@@ -266,8 +266,12 @@ def slip3D(rupt,marker_size=60,clims=None,plot_onset=False,cmap=whitejet):
     else:
         plot_variable=onsets
 
+    #cmap = 'magma_r'
+    elev = 51.0
+    azim = 79.5
+
     #Plot it
-    fig = plt.figure(figsize=(14, 4))
+    fig = plt.figure(figsize=(10, 7))
     ax = fig.add_subplot(111, projection='3d')
     if clims==None:
         p=ax.scatter(lon, lat, depth, c=plot_variable,cmap=cmap, marker='o',s=marker_size,lw=0)
@@ -276,6 +280,11 @@ def slip3D(rupt,marker_size=60,clims=None,plot_onset=False,cmap=whitejet):
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
     ax.set_zlabel('Depth (km)')
+    ax.view_init(elev, azim)
+    # yticks = [-153.9]
+    # xticks = [19.3]
+    # ax.set_xticks(xticks)
+    # ax.set_yticks(yticks)
     cb=fig.colorbar(p)
     
     if plot_onset==False:
@@ -283,7 +292,8 @@ def slip3D(rupt,marker_size=60,clims=None,plot_onset=False,cmap=whitejet):
     else:
         cb.set_label('Onset time (s)')
     plt.subplots_adjust(left=0.1, bottom=0.1, right=1.0, top=0.9, wspace=0, hspace=0)
-    plt.title(rupt)
+    #plt.title(rupt)
+    plt.savefig('figure_static.png', dpi = 200)
     plt.show()
 
 
@@ -2825,3 +2835,63 @@ def slip2geo(ss,ds,strike):
     x=xss+xds
     y=yss+yds
     return x,y
+
+
+def spread_plot(home,project_name,run_name, name_data1, name_data2):   # works only with 2D weights 
+
+    from glob import glob
+    from numpy import zeros,argmin,log10,linspace
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import matplotlib.colors as colors
+# name_data 1 or 2 are : 'weight_static' , 'weight_displacement', 'weight_velocity', 'w'eight_tsunami', 'weight_insar'
+
+    outdir=home+project_name+'/output/inverse_models/models/'
+    # if type(run_name)==list:
+    #     for k in range(len(run_name)):
+    #         if k==0:
+    #             logs=glob(outdir+'*'+run_name[k]+'.????.log')
+    #         else:
+    #             logs+=glob(outdir+'*'+run_name[k]+'.????.log') 
+    # else:
+    logs= sorted ( glob(outdir+'*'+run_name+'.????.log') )
+    print(logs)    
+    spread=zeros(len(logs))
+    weight1=zeros(len(logs))
+    weight2=zeros(len(logs))
+    print('Gathering spread for '+str(len(logs))+' inversions...')
+    for k in range(len(logs)):
+        with open(logs[k]) as f:
+            for line in f:
+                if 'spread' in line:
+                    spread[k]= (float(line.split('=')[1]))
+                if name_data1 in line:
+                    weight1[k]=float(line.split('=')[1])
+                if name_data2 in line:
+                    weight2[k]=float(line.split('=')[1])
+    #print(spread)
+    #print(weight1)
+
+
+    weight1=np.linspace(0.1,10,num=20)
+    weight2 =np.linspace(0.1,10,num=20)
+    ww1,ww2= np.meshgrid(log10(weight1), log10(weight2), indexing='ij') 
+    print (spread)
+    spread_new = np.reshape(spread, (20,20))
+
+    fig = plt.figure()
+    #ax = plt.pcolor(ww1, ww2, spread_new, cmap = 'magma', vmin = 0.1, vmax= 2)
+    x = plt.pcolor(ww1, ww2, spread_new, norm=colors.LogNorm(vmin= 1, vmax= 100),
+                   cmap='magma')
+    cbar =plt.colorbar()
+    plt.xlabel( '$log$(weights 1)')
+    plt.ylabel( '$log$(weights 2)')
+    plt.tight_layout()
+    cbar.set_label ('GB Spread') 
+    plt.savefig('GB_spread_1.png')
+    plt.show()
+
+
+
+
+

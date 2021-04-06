@@ -908,10 +908,13 @@ def get_data_weights(home,project_name,GF_list,d,decimate, all_weights):
     #if decimate==None:
     #    decimate=1
     #Static weights
+
+    # multiplication with all_weights is added by khurram
+
     kgf=0
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
-        w[kinsert]=1/weights[i[ksta],0] * all_weights[0] #North
+        w[kinsert]=1/weights[i[ksta],0] * all_weights[0] #North   
         w[kinsert+1]=1/weights[i[ksta],1] * all_weights[0] #East
         w[kinsert+2]=1/weights[i[ksta],2] * all_weights[0] #Up
         kinsert=kinsert+3
@@ -2722,17 +2725,6 @@ def data_norms(home,project_name,GF_list,decimate=None,bandpass=[None,None,None]
         print("||InSAR|| = NaN")
 
 
-def calculate_reslution_matrix (K_inv, WG):
-    '''
-        calculate_reslution_matrix (G^-g * G) 
-
-        input WG = Weighted G matrix
-        input K_inv = Generalized inverse matrix 
-        '''
-    from numpy import matmul
-
-    return matmul(K_inv, WG)
-
 
 def calculate_reslution_matrix (G_inv, WG):
     '''
@@ -2743,7 +2735,7 @@ def calculate_reslution_matrix (G_inv, WG):
         '''
     return (G_inv).dot (WG)
 
-def calc_distance_weight_matrix (coord):
+def calc_distance_weight_matrix (source):
     '''
         calculate distance weight matrix  ||W_d||
         input coord = fault coordinates 
@@ -2751,38 +2743,50 @@ def calc_distance_weight_matrix (coord):
 
     from numpy import zeros
     import scipy.spatial.distance as sd
+    from numpy import tile,sin,cos,deg2rad,sqrt
 
-    numfault = len(coord)
+    R=6371.
+    x=(R-source[:,3])*sin(deg2rad(90-source[:,2]))*cos(deg2rad(source[:,1]))
+    y=(R-source[:,3])*sin(deg2rad(90-source[:,2]))*sin(deg2rad(source[:,1]))
+    z=(R-source[:,3])*cos(deg2rad(90-source[:,2]))
+    
+
+
+    numfault = len(x)
 
     coord_mat = zeros((numfault*2,3))
     for ii in range (numfault):
         jj = ii*2 
         kk= ii*2 +1 
-        coord_mat[jj,0] = coord [ii,0]
-        coord_mat[jj,1] = coord [ii,1]
-        coord_mat[jj,2] = coord [ii,2]
+        coord_mat[jj,0] = x[ii]
+        coord_mat[jj,1] = y[ii]
+        coord_mat[jj,2] = z[ii]
 
-        coord_mat[kk,0] = coord [ii,0]
-        coord_mat[kk,1] = coord [ii,1]
-        coord_mat[kk,2] = coord [ii,2]
-
-    W_matr = sd.cdist(coord_mat, coord_mat, 'euclidean')
-
-
-
-    print ('W_matr',W_matr)
-
-    return W_matr
+        coord_mat[kk,0] = x[ii]
+        coord_mat[kk,1] = y[ii]
+        coord_mat[kk,2] = z[ii]
+#    print(coord_mat)
+        
+    dist_matr = sd.cdist(coord_mat, coord_mat, 'euclidean')
+    return dist_matr 
 
 
-def calculate_spread_BG (W_matr, R_matr):
+
+def calculate_spread_BG (D_matr, R_matr):
     '''
         calculate_BG speard ||R||
         input R = Resolution  matrix 
         '''
+    import numpy as np
 
-    spread_BG = ( W_matr * R_matr**2 )
+    size  =len(D_matr)
 
+    # print('go for it' ,D_matr.shape, R_matr.shape, len(D_matr))
+    spread_BG = np.zeros((size,size))
+    for ii in range(size):
+        for jj in range(size):
+            spread_BG[ii,jj] = ( D_matr[ii,jj] * R_matr[ii,jj]**2 )
+    print(spread_BG.shape, spread_BG.sum())
     return spread_BG.sum()
 
 
@@ -2801,7 +2805,77 @@ def gen_w_vectors(min_of_w, max_of_w, tot_w_points ):
     plt.plot(1)
     plt.show()    
 
-#   return
-    # grid search, compute error, E
+def write_log_n_spread(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,
+        beta,L2,Lm,VR,ABIC,Mo,Mw,velmod,fault,g_name,gflist,solver,L2data, all_weights, spread):
+    '''
+    Write inversion sumamry to .log file
+    
+    IN:
+        home: Home directory location
+        project_name: Name of the problem
+        run_name: Name of inversion run
+        k: Inversion run number
+        rupture_speed: Fastest rupture speed allowed
+        num_windows: Number of temporal rupture windows
+        lambda_spatial: Spatial regularization parameter
+        lambda_temporal: Temporal regularization parameter
+        beta: Angular offset applied to rake
+        L2: L2 norm of ivnersion L2=||Gm-d||
+        Lm: Model norm Lm=||L*m||
+        VR: Variance reduction
+        ABIC: Value of Akaike's Bayesian ifnormation criterion
+        Mo: Moment in N-m
+        Mw: Moment magnitude
+        velmod: Earth structure model used
+        fault: Fault model used
+        g_name: GF matrix used
+        gflist: GF control file sued
+        solver: Type of solver used
+    OUT:
+        Nothing
+    '''
+    
+    
+    num=str(k).rjust(4,'0')
+    f=open(home+project_name+'/output/inverse_models/models/'+run_name+'.'+num+'.log','w')
+    f.write('Project: '+project_name+'\n')
+    f.write('Run name: '+run_name+'\n')
+    f.write('Run number: '+num+'\n')
+    f.write('Velocity model: '+velmod+'\n')
+    f.write('Fault model: '+fault+'\n')
+    f.write('G name: '+g_name+'\n')
+    f.write('GF list: '+gflist+'\n')
+    f.write('Solver: '+solver+'\n')
+    f.write('lambda_spatial = '+repr(lambda_spatial)+'\n')
+    f.write('lambda_temporal = '+repr(lambda_temporal)+'\n')
+    f.write('Beta(degs) = '+repr(beta)+'\n')
+    f.write('Mean rupture velocity (km/s) = '+str(rupture_speed)+'\n')
+    f.write('Number of rupture windows = '+str(num_windows)+'\n')
+    f.write('L2 = '+repr(L2)+'\n')
+    f.write('VR static(%) = '+repr(VR[0])+'\n')
+    f.write('VR displacement(%) = '+repr(VR[1])+'\n')
+    f.write('VR velocity(%) = '+repr(VR[2])+'\n')
+    f.write('VR tsunami(%) = '+repr(VR[3])+'\n')
+    f.write('VR InSAR LOS(%) = '+repr(VR[4])+'\n')
+    f.write('RMS static(%) = '+repr(L2data[0])+'\n')
+    f.write('RMS displacement(%) = '+repr(L2data[1])+'\n')
+    f.write('RMS velocity(%) = '+repr(L2data[2])+'\n')
+    f.write('RMS tsunami(%) = '+repr(L2data[3])+'\n')
+    f.write('RMS InSAR LOS(%) = '+repr(L2data[4])+'\n')
+    f.write('Lm = '+repr(Lm)+'\n')
+    f.write('ABIC = '+repr(ABIC)+'\n')
+    f.write('M0(N-m) = '+repr(Mo)+'\n')
+    f.write('Mw = '+repr(Mw)+'\n')
+    f.write('weight_static = '+repr(all_weights[0])+'\n')
+    f.write('weight_displacement = '+repr(all_weights[1])+'\n')
+    f.write('weight_velocity = '+repr(all_weights[2])+'\n')
+    f.write('weight_tsunami = '+repr(all_weights[3])+'\n')
+    f.write('weight_insar = '+repr(all_weights[4])+'\n')
+    f.write('spread = '+repr(spread)+'\n')
+
+    f.close()
+
+
+
 
     
